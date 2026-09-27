@@ -1,17 +1,22 @@
-import {db} from '@/db'
-import {smokeTest} from '@/db/schema'
-import { searchFilms } from '@/lib/tmdb'
-import { createClient } from '@/lib/supabase/server'
+import ReviewCard from '@/components/ReviewCard'
+import { getRecentApprovedReviews } from '@/db/queries/reviews'
 
-export default async function Smoke() {
-    const supabase = await createClient()
-    const {data: {user}} = await supabase.auth.getUser()
-    await db.insert(smokeTest).values({note: `hit at ${new Date().toISOString()}`})
-    const rows = await db.select().from(smokeTest).limit(5)
-    const films = await searchFilms('batman')
+export default async function Home() {
+    const recent = await getRecentApprovedReviews(20)
+
     return (
-        <pre className="p-8 text-xs">
-            {JSON.stringify({user: user?.email ?? null, rows: rows.length, films: films.slice(0,3)}, null, 2)}
-        </pre>
+        <main className="max-w-2xl mx-auto p-8 flex flex-col gap-8">
+            <form action="/search" className="flex gap-2">
+                <input name="q" placeholder="Search films to review" className="flex-1 border rounded px-3 py-2" />
+                <button type="submit" className="bg-black text-white rounded px-4 py-2">Search</button>
+            </form>
+
+            <section className="flex flex-col gap-4">
+                <h1 className="font-semibold">Recent reviews</h1>
+                {recent.length === 0
+                    ? <p className="text-gray-500">No approved reviews yet.</p>
+                    : recent.map((r) => <ReviewCard key={r.id} review={r} showFilm showAuthor />)}
+            </section>
+        </main>
     )
 }

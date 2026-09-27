@@ -1,6 +1,6 @@
 import { pgTable, pgEnum, uuid, text, integer, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
-// PROVISIONAL: profiles, films and reviews were written without access to the
+// PROVISIONAL: everything below smoke_test was written without access to the
 // live database (see scripts/verify-db.ts). Reconcile with `drizzle-kit pull`
 // before running `pnpm db:push`, or push may alter/drop the real tables.
 
@@ -13,10 +13,14 @@ export const smokeTest = pgTable('smoke_test', {
 })
 
 export const reviewStatus = pgEnum('review_status', ['pending', 'approved', 'rejected'])
+// Tier values are a guess; they only affect TS types, rows render whatever string is stored.
+export const tier = pgEnum('tier', ['newcomer', 'regular', 'critic'])
 
 // id matches auth.users.id; rows are created by the on_auth_user_created trigger.
 export const profiles = pgTable('profiles', {
     id: uuid('id').primaryKey(),
+    handle: text('handle').notNull().unique(),
+    tier: tier('tier').notNull(),
 })
 
 export const films = pgTable('films', {
@@ -38,3 +42,11 @@ export const reviews = pgTable('reviews', {
 }, (t) => [
     uniqueIndex('reviews_one_per_film').on(t.userId, t.filmId),
 ])
+
+// Append-only: never UPDATE or DELETE. Corrections are new rows with negative deltas.
+// Only the columns read so far are declared.
+export const reputationEvents = pgTable('reputation_events', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => profiles.id),
+    delta: integer('delta').notNull(),
+})
