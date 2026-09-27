@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import ReviewCard, { TierBadge } from '@/components/ReviewCard'
-import { getProfileByHandle, getRepScore } from '@/db/queries/profiles'
+import { getProfileByHandle } from '@/db/queries/profiles'
 import { getReviewsByProfile } from '@/db/queries/reviews'
 import { currentProfile } from '@/lib/auth'
 
@@ -9,11 +9,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ handle
     const profile = await getProfileByHandle(decodeURIComponent(handle))
     if (!profile) notFound()
 
-    const [viewer, repScore, allReviews] = await Promise.all([
-        currentProfile(),
-        getRepScore(profile.id),
-        getReviewsByProfile(profile.id),
-    ])
+    const [viewer, allReviews] = await Promise.all([currentProfile(), getReviewsByProfile(profile.id)])
     const isOwn = viewer?.id === profile.id
     const approved = allReviews.filter((r) => r.status === 'approved')
     const unpublished = allReviews.filter((r) => r.status !== 'approved')
@@ -23,7 +19,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ handle
             <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold">@{profile.handle}</h1>
                 <TierBadge tier={profile.tier} />
-                <span className="text-gray-600 ml-auto">{repScore} rep</span>
+                <span className="text-gray-600 ml-auto">{profile.repScore} rep</span>
             </div>
 
             {isOwn && unpublished.length > 0 && (

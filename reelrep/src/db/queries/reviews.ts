@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { films, profiles, reviews } from '@/db/schema'
 
@@ -39,4 +39,11 @@ export function getRecentApprovedReviews(limit: number) {
         .where(eq(reviews.status, 'approved'))
         .orderBy(desc(reviews.submittedAt))
         .limit(limit)
+}
+
+// Moderation queue: oldest first so nothing waits forever
+export function getPendingReviews() {
+    return reviewsWithJoins()
+        .where(eq(reviews.status, 'pending'))
+        .orderBy(asc(reviews.submittedAt))
 }

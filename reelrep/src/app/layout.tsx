@@ -40,6 +40,7 @@ export default async function RootLayout({
             <div className="ml-auto flex items-center gap-4">
               {profile ? (
                 <>
+                  {profile.isModerator && <Link href="/mod" className="hover:underline">Moderation</Link>}
                   <Link href={`/u/${profile.handle}`} className="hover:underline">@{profile.handle}</Link>
                   <form action={signOut}>
                     <button type="submit" className="text-gray-600 hover:underline">Sign out</button>
