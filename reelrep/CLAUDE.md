@@ -8,7 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ReelRep: a film review platform POC. Users write reviews, the owner approves them manually, and approved reviewers receive ERC-20 tokens on Base Sepolia testnet (testnet only, never mainnet). Audience is ~10 friends. Deployed on Vercel. Planned later: Foundry, wagmi, viem.
 
-[ROADMAP.md](ROADMAP.md) has the loop, the on-chain/off-chain boundary, the session-by-session build order (one session per day, don't work ahead), the hard boundaries and the deliberate POC compromises. Read it before starting a session.
+[ROADMAP.md](ROADMAP.md) has the loop, the on-chain/off-chain boundary, the session-by-session build order (one session per day, don't work ahead), the hard boundaries and the deliberate POC compromises. Read it before starting a session, and tick the day off when it's done.
+
+Contracts live in `../contracts/` (Foundry, same git repo; forge-std and OpenZeppelin are pinned git submodules, so run `git submodule update --init --recursive` after cloning). Its [README](../contracts/README.md) has the commands, the Solidity orientation and the Day 5 checklist. Don't create a separate contracts repo.
 
 Stack: Next.js 16 (App Router, React 19, TypeScript, Tailwind v4), Supabase (auth + Postgres), Drizzle ORM, TMDB movie API. The app lives in `reelrep/`; the git root is the parent `SuperMovies/` directory, which also has a stray `package.json`/`node_modules` from an early Supabase install — work inside `reelrep/`.
 
@@ -28,9 +30,11 @@ Next 16 differs from older versions. Before using a Next API, check `node_module
 Package manager is pnpm (`pnpm-lock.yaml`). Run from `reelrep/`:
 
 ```bash
+pnpm install      # also needed before reading node_modules/next/dist/docs/
 pnpm dev          # dev server on http://localhost:3000
 pnpm build
 pnpm lint         # eslint (flat config, next core-web-vitals + typescript)
+pnpm exec tsc --noEmit   # typecheck
 pnpm db:studio    # drizzle studio
 pnpm dotenv -e .env.local -- pnpm tsx scripts/verify-db.ts               # check tables, enums, RLS, indexes, signup trigger
 pnpm dotenv -e .env.local -- pnpm tsx scripts/run-sql.ts <file.sql>      # apply a SQL file
@@ -46,9 +50,10 @@ Do **not** run `pnpm db:push`: Drizzle doesn't model the triggers, checks or RLS
 - **TMDB**: `src/lib/tmdb.ts` calls TMDB v3 server-side with `TMDB_READ_ACCESS_TOKEN` (Bearer), cached via `next: { revalidate: 86400 }`, and normalizes results to `{ tmdbId, title, year, posterPath }`.
 - **Pages**: `/` (recent approved reviews), `/search` (TMDB search) → `/film/[tmdbId]` (DB row falling back to TMDB, `ReviewForm`, approved reviews), `/u/[handle]` (profile; the owner also sees pending/rejected), `/mod` (moderation queue, moderators only). Films are only stored in the DB once reviewed. The layout header calls `currentProfile()`, which is wrapped in React `cache()` so pages can call it again for free.
 - **Review lists**: every query in `src/db/queries/reviews.ts` returns the same joined shape (`ReviewRow`: review + `author` + `film`), rendered by `src/components/ReviewCard.tsx`.
-- **Reputation** (`src/lib/reputation.ts`, `src/app/actions/moderation.ts`): approving a review appends a `reputation_events` row (`BASE_POINTS × GRADE_MULTIPLIER[grade]`, tagged with the ISO `epoch_week`) and recomputes the cached `profiles.rep_score` and `tier` from `SUM(delta)`, all in one transaction. Approve/reject only act on `pending` reviews (the status check in the UPDATE's WHERE is the idempotency guard), and the author's profile row is locked `FOR UPDATE` before summing. Moderator access is `profiles.is_moderator`; grant it with `scripts/make-moderator.ts <email>`.
+- **Reputation** (`src/lib/reputation.ts`, `src/app/actions/moderation.ts`): approving a review appends a `reputation_events` row (`BASE_POINTS × GRADE_MULTIPLIER[grade]`, tagged with the ISO `epoch_week`) and recomputes the cached `profiles.rep_score` and `tier` from `SUM(delta)`, all in one transaction. Approve/reject only act on `pending` reviews (the status check in the UPDATE's WHERE is the idempotency guard), and the author's profile row is locked `FOR UPDATE` before summing. Moderator access is `profiles.is_moderator`; grant it with `scripts/make-moderator.ts <email>`. The tier list lives in three places that must match: the `tier` enum in `db/foundation.sql`, the `tier` pgEnum in `schema.ts`, and `TIER_THRESHOLDS` in `reputation.ts`.
+- **Constraint errors**: DB constraints back up the app's rules (one review per film, one reputation event per review). Drizzle wraps driver errors in `DrizzleQueryError`, so to catch a specific violation check both the error and its `.cause` for `code === '23505'` and `constraint_name` (see `isUniqueViolation` in `src/app/actions/reviews.ts`).
 - Path alias `@/*` → `src/*`.
 
 ## Environment
 
-`.env.local` (gitignored; `.env.example` is out of date) needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DATABASE_URL`, `DIRECT_URL`, `TMDB_READ_ACCESS_TOKEN`. Scripts prefer `DIRECT_URL` over `DATABASE_URL`. Supabase's direct host (`db.<ref>.supabase.co`) is IPv6-only, so on an IPv4 network `DIRECT_URL` must be the Session pooler string (pooler host, port 5432). Otherwise prefix script commands with `DIRECT_URL=` to fall back to the pooler.
+`.env.local` (gitignored, like every `.env*` file; there's no committed example) needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DATABASE_URL`, `DIRECT_URL`, `TMDB_READ_ACCESS_TOKEN`. Scripts prefer `DIRECT_URL` over `DATABASE_URL`. Supabase's direct host (`db.<ref>.supabase.co`) is IPv6-only, so on an IPv4 network `DIRECT_URL` must be the Session pooler string (pooler host, port 5432). Otherwise prefix script commands with `DIRECT_URL=` to fall back to the pooler.
