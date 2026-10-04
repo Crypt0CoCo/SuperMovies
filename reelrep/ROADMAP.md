@@ -41,11 +41,11 @@ Fixed supply, minted once. No owner, no minter role, no pausable, no upgradeabil
 
 One session per day. Do not work ahead.
 
-- [ ] **Day 0**: Verify the database: six tables, three enums, RLS on, signup trigger firing.
-- [ ] **Day 1**: Auth (magic link), TMDB search, film pages, review submission.
-- [ ] **Day 2**: Public read pages: film reviews, profiles, home feed.
-- [ ] **Day 3**: Moderation queue, approve/reject, reputation engine, tiers.
-- [ ] **Day 4**: Foundry setup and Solidity orientation (explain, don't just build).
+- [x] **Day 0**: Verify the database: four tables (review_checks and votes deferred), three enums, RLS on, signup trigger firing.
+- [x] **Day 1**: Auth (magic link), TMDB search, film pages, review submission.
+- [x] **Day 2**: Public read pages: film reviews, profiles, home feed.
+- [x] **Day 3**: Moderation queue, approve/reject, reputation engine, tiers.
+- [x] **Day 4**: Foundry setup and Solidity orientation (explain, don't just build). Lives in `../contracts/`.
 - [ ] **Day 5**: `ReelToken.sol`, tests, deploy to Base Sepolia.
 - [ ] **Day 6**: Wallet connect, hot-wallet payout on approval.
 - [ ] **Day 7**: Burn-for-benefit redemption flow.
