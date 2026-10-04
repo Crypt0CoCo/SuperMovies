@@ -2,7 +2,8 @@
 // Run: pnpm dotenv -e .env.local -- pnpm tsx scripts/verify-db.ts
 import postgres from 'postgres'
 
-const TABLES = ['profiles', 'films', 'reviews', 'review_checks', 'votes', 'reputation_events']
+// review_checks and votes are deferred until a session needs them
+const TABLES = ['profiles', 'films', 'reviews', 'reputation_events']
 const ENUMS = ['review_status', 'tier', 'rep_source']
 
 const url = process.env.DIRECT_URL || process.env.DATABASE_URL
@@ -27,7 +28,7 @@ async function check(name: string, fn: () => Promise<{ pass: boolean; detail: st
 }
 
 async function main() {
-    await check('1. Six tables exist in public', async () => {
+    await check('1. Four tables exist in public', async () => {
         const rows = await sql<{ table_name: string }[]>`
             select table_name from information_schema.tables
             where table_schema = 'public' and table_name in ${sql(TABLES)}`
@@ -44,7 +45,7 @@ async function main() {
         return { pass: gone.length === 0, detail: gone.length ? `missing: ${gone.join(', ')}` : 'all present' }
     })
 
-    await check('3. RLS enabled on all six tables', async () => {
+    await check('3. RLS enabled on all four tables', async () => {
         const rows = await sql<{ tablename: string; rowsecurity: boolean }[]>`
             select tablename, rowsecurity from pg_tables
             where schemaname = 'public' and tablename in ${sql(TABLES)}`

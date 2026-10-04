@@ -20,7 +20,7 @@ Next 16 differs from older versions. Before using a Next API, check `node_module
 - Server Components by default; add `'use client'` only when genuinely needed.
 - All DB access goes through Drizzle in server code. The Supabase JS client is for auth only, never for data.
 - RLS is enabled with **no policies** on every table, intentionally. Drizzle uses direct Postgres credentials and bypasses RLS, so authorization is enforced in server code. Every new table gets RLS enabled with no policies.
-- `reputation_events` is append-only: never UPDATE or DELETE it. Corrections are new rows with negative deltas.
+- `reputation_events` is append-only: never UPDATE or DELETE it (a DB trigger raises if you try). Corrections are new rows with `source = 'correction'` and a negative delta.
 - Mutations are Server Actions in `src/app/actions/`, validated with zod.
 
 ## Commands
@@ -31,15 +31,17 @@ Package manager is pnpm (`pnpm-lock.yaml`). Run from `reelrep/`:
 pnpm dev          # dev server on http://localhost:3000
 pnpm build
 pnpm lint         # eslint (flat config, next core-web-vitals + typescript)
-pnpm db:push      # drizzle-kit push schema to Supabase (loads .env.local via dotenv-cli)
 pnpm db:studio    # drizzle studio
+pnpm dotenv -e .env.local -- pnpm tsx scripts/verify-db.ts               # check tables, enums, RLS, indexes, signup trigger
+pnpm dotenv -e .env.local -- pnpm tsx scripts/run-sql.ts <file.sql>      # apply a SQL file
+pnpm dotenv -e .env.local -- pnpm tsx scripts/make-moderator.ts <email>  # grant is_moderator
 ```
 
-There is no test framework set up.
+Do **not** run `pnpm db:push`: Drizzle doesn't model the triggers, checks or RLS in `db/foundation.sql`, so a push could drop them. There is no test framework set up.
 
 ## Architecture
 
-- **Database (Drizzle ORM + postgres-js)**: schema in `src/db/schema.ts`, client in `src/db/index.ts`. The runtime client uses `DATABASE_URL` (Supabase pooler, hence `prepare: false`); drizzle-kit uses `DIRECT_URL` (`drizzle.config.ts`). Schema changes are applied with `db:push`, not migrations. The `profiles`/`films`/`reviews` definitions are provisional (written while the DB was unreachable): reconcile with `drizzle-kit pull` before any `db:push`, or push may alter or drop live tables. Query helpers live in `src/db/queries/`.
+- **Database (Drizzle ORM + postgres-js)**: schema in `src/db/schema.ts`, client in `src/db/index.ts`. The runtime client uses `DATABASE_URL` (Supabase pooler, hence `prepare: false`); drizzle-kit uses `DIRECT_URL` (`drizzle.config.ts`). **`db/foundation.sql` is the source of truth** for the schema (enums, four tables, RLS, the `reviews_one_per_film` and `reputation_events_one_per_review` unique indexes, the append-only trigger, and the `on_auth_user_created` trigger that creates a profile with a random `user_xxxxxxxx` handle). To change the schema, write SQL, apply it with `scripts/run-sql.ts`, then mirror the columns in `schema.ts`. `review_checks` and `votes` are deferred until a session needs them. Query helpers live in `src/db/queries/`.
 - **Auth (Supabase SSR)**: `src/lib/supabase/server.ts` (Server Components/Actions, uses `cookies()`), `client.ts` (browser). Both use `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`. `src/proxy.ts` runs `updateSession` from `src/lib/supabase/middleware.ts` to refresh auth cookies on every request. Magic-link sign-in lands on `src/app/auth/callback/route.ts`, which accepts both `?code=` and `?token_hash=&type=`. `currentProfile()` in `src/lib/auth.ts` returns the signed-in user's `profiles` row (or null).
 - **TMDB**: `src/lib/tmdb.ts` calls TMDB v3 server-side with `TMDB_READ_ACCESS_TOKEN` (Bearer), cached via `next: { revalidate: 86400 }`, and normalizes results to `{ tmdbId, title, year, posterPath }`.
 - **Pages**: `/` (recent approved reviews), `/search` (TMDB search) → `/film/[tmdbId]` (DB row falling back to TMDB, `ReviewForm`, approved reviews), `/u/[handle]` (profile; the owner also sees pending/rejected), `/mod` (moderation queue, moderators only). Films are only stored in the DB once reviewed. The layout header calls `currentProfile()`, which is wrapped in React `cache()` so pages can call it again for free.
@@ -49,4 +51,4 @@ There is no test framework set up.
 
 ## Environment
 
-`.env.local` (gitignored; `.env.example` is out of date) needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DATABASE_URL`, `DIRECT_URL`, `TMDB_READ_ACCESS_TOKEN`.
+`.env.local` (gitignored; `.env.example` is out of date) needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DATABASE_URL`, `DIRECT_URL`, `TMDB_READ_ACCESS_TOKEN`. Scripts prefer `DIRECT_URL` over `DATABASE_URL`. Supabase's direct host (`db.<ref>.supabase.co`) is IPv6-only, so on an IPv4 network `DIRECT_URL` must be the Session pooler string (pooler host, port 5432). Otherwise prefix script commands with `DIRECT_URL=` to fall back to the pooler.
